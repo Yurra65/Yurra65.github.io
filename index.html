@@ -1164,30 +1164,39 @@ $$('[data-copy]').forEach(function(ch){
   });
 });
 
-/* ---------- Озвучка (Web Speech API) ---------- */
-var synth=('speechSynthesis' in window)?window.speechSynthesis:null;
-var deVoice=null,currentUI=null;
-function pickVoice(){
-  if(!synth)return;
-  try{
-    var vs=synth.getVoices();
-    deVoice=vs.filter(function(v){return /^de(-|_|$)/i.test(v.lang)&&/google|natural|premium|enhanced/i.test(v.name);})[0]
-      ||vs.filter(function(v){return /^de(-|_|$)/i.test(v.lang);})[0]||null;
-  }catch(e){}
-}
-if(synth){pickVoice();if(synth.addEventListener)synth.addEventListener('voiceschanged',pickVoice);}
+/* ---------- Озвучка (MP3 файлы) ---------- */
+var AUDIO_MAP=[
+  'audiosait/ex-1.mp3',
+  'audiosait/ex-2.mp3',
+  'audiosait/tx_3.mp3',
+  'audiosait/ex_4.mp3',
+  'audiosait/ex_5.mp3',
+  'audiosait/ex_6.mp3'
+];
+var currentAudio=null,currentUI=null;
 function cancelSpeech(){
-  if(synth){try{synth.cancel();}catch(e){}}
+  if(currentAudio){
+    currentAudio.pause();
+    currentAudio.currentTime=0;
+    currentAudio=null;
+  }
   if(currentUI){var f=currentUI;currentUI=null;f(false);}
 }
-function speak(text,ui){
-  if(!synth){toast('Озвучка доступна в боте 🔊');return;}
+function speak(index,ui){
   cancelSpeech();
-  var u=new SpeechSynthesisUtterance(text);
-  u.lang='de-DE';if(deVoice)u.voice=deVoice;u.rate=.92;
-  currentUI=ui;if(ui)ui(true);
-  u.onend=u.onerror=function(){if(currentUI===ui){currentUI=null;if(ui)ui(false);}};
-  try{synth.speak(u);}catch(e){if(currentUI===ui){currentUI=null;if(ui)ui(false);}toast('Озвучка доступна в боте 🔊');}
+  var src=AUDIO_MAP[index];
+  if(!src)return;
+  var a=new Audio(src);
+  currentAudio=a;
+  currentUI=ui;
+  if(ui)ui(true);
+  a.onended=a.onerror=a.onabort=function(){
+    if(currentAudio===a){currentAudio=null;currentUI=null;if(ui)ui(false);}
+  };
+  a.play().catch(function(e){
+    if(currentAudio===a){currentAudio=null;currentUI=null;if(ui)ui(false);}
+    console.warn('Audio play failed:',e);
+  });
 }
 document.addEventListener('visibilitychange',function(){if(document.hidden)cancelSpeech();});
 
@@ -1250,13 +1259,13 @@ function playChat(){
   later(function(){if(t3)t3.remove();addMsg(phoneQuizHTML(),'msg-quiz');},4050);
 }
 chat.addEventListener('click',function(e){
-  var vb=e.target.closest('.voice-btn');
-  if(vb){
-    if(vb.classList.contains('playing')){cancelSpeech();return;}
-    var p=PHRASES[0];
-    speak(p.de+' '+p.ex,function(on){vb.classList.toggle('playing',on);});
-    return;
-  }
+   var vb=e.target.closest('.voice-btn');
+   if(vb){
+     if(vb.classList.contains('playing')){cancelSpeech();return;}
+     var p=PHRASES[0];
+     speak(0,function(on){vb.classList.toggle('playing',on);});
+     return;
+   }
   var qo=e.target.closest('.qopt');
   if(qo){
     var wrap=qo.closest('.msg-quiz');
@@ -1406,17 +1415,16 @@ function quizNext(){
 function quizRestart(){state.qi=0;state.score=0;state.answered=false;state.qDone=false;dirClass='';renderTrainer();}
 
 tbody.addEventListener('click',function(e){
-  var act=e.target.closest('[data-action]');
-  if(act){
-    var a=act.dataset.action;
-    if(a==='tts'){
-      if(act.classList.contains('speaking')){cancelSpeech();return;}
-      var p=PHRASES[state.i];
-      speak(p.de+' '+p.ex,function(on){
-        act.classList.toggle('speaking',on);
-        var lb=$('.tts-label',act);if(lb)lb.textContent=on?'Звучит…':'Прослушать';
-      });
-    }
+   var act=e.target.closest('[data-action]');
+   if(act){
+     var a=act.dataset.action;
+      if(a==='tts'){
+        if(act.classList.contains('speaking')){cancelSpeech();return;}
+        speak(state.i,function(on){
+          act.classList.toggle('speaking',on);
+          var lb=$('.tts-label',act);if(lb)lb.textContent=on?'Звучит…':'Прослушать';
+        });
+      }
     else if(a==='prev')go(-1);
     else if(a==='next')go(1);
     else if(a==='quiz-next')quizNext();
